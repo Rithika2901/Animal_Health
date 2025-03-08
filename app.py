@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from scipy.spatial.distance import cdist
 import kagglehub
 
@@ -13,16 +13,24 @@ df = pd.read_csv(csv_file_path)
 # ✅ Print column names to debug missing columns
 st.write("Columns in dataset:", df.columns.tolist())
 
-# ✅ Check if columns exist before dropping them
-columns_to_drop = ["Disease_Prediction", "Agglomerative_Cluster"]
-existing_columns = [col for col in columns_to_drop if col in df.columns]
+# ✅ Identify categorical columns
+categorical_cols = [
+    "Animal_Type", "Breed", "Gender", "Symptom_1", "Symptom_2", "Symptom_3", "Symptom_4",
+    "Duration", "Appetite_Loss", "Vomiting", "Diarrhea", "Coughing", "Labored_Breathing",
+    "Lameness", "Skin_Lesions", "Nasal_Discharge", "Eye_Discharge", "Body_Temperature"
+]
 
-if existing_columns:
-    features = df.drop(columns=existing_columns)  # Drop only existing columns
-else:
-    features = df.copy()  # If columns don't exist, use full dataset
+# ✅ Encode categorical columns into numeric values
+label_encoders = {}
+for col in categorical_cols:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+    label_encoders[col] = le  # Store encoders if needed later
 
-# ✅ Standardize features
+# ✅ Drop `Disease_Prediction` column (as it's a text column and not needed for clustering)
+features = df.drop(columns=["Disease_Prediction"]) 
+
+# ✅ Standardize numerical features
 scaler = StandardScaler()
 features_scaled = scaler.fit_transform(features)
 
@@ -58,14 +66,29 @@ diarrhea = st.sidebar.selectbox("Diarrhea", ["Yes", "No"])
 coughing = st.sidebar.selectbox("Coughing", ["Yes", "No"])
 temperature = st.sidebar.number_input("Body Temperature (°C)", min_value=35.0, max_value=42.0, value=38.5)
 
+# ✅ Convert user input into numeric format
+user_input = [
+    label_encoders["Animal_Type"].transform([animal_type])[0],
+    label_encoders["Breed"].transform([breed])[0],
+    age,
+    label_encoders["Gender"].transform([gender])[0],
+    weight,
+    label_encoders["Symptom_1"].transform([symptom_1])[0],
+    label_encoders["Symptom_2"].transform([symptom_2])[0],
+    label_encoders["Symptom_3"].transform([symptom_3])[0],
+    label_encoders["Symptom_4"].transform([symptom_4])[0],
+    1 if appetite_loss == "Yes" else 0,
+    1 if vomiting == "Yes" else 0,
+    1 if diarrhea == "Yes" else 0,
+    1 if coughing == "Yes" else 0,
+    temperature
+]
+
 # ✅ Predict Disease
 if st.sidebar.button("Predict Disease"):
-    user_input = [animal_type, breed, age, gender, weight, symptom_1, symptom_2, symptom_3, symptom_4,
-                  appetite_loss, vomiting, diarrhea, coughing, temperature]
-
     predicted_cluster = predict_cluster(user_input)
 
-    # ✅ Ensure Disease_Prediction exists before using it
+    # ✅ Ensure `Disease_Prediction` exists before using it
     if "Disease_Prediction" in df.columns and "Agglomerative_Cluster" in df.columns:
         possible_diseases = df[df["Agglomerative_Cluster"] == predicted_cluster]["Disease_Prediction"].value_counts().index.tolist()
         disease_list = ", ".join(possible_diseases[:3]) if possible_diseases else "No data available"
@@ -74,3 +97,4 @@ if st.sidebar.button("Predict Disease"):
 
     st.subheader(f"📌 Predicted Cluster: {predicted_cluster}")
     st.write(f"🚑 **Possible Diseases:** {disease_list}")
+
